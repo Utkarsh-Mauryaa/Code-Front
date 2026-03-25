@@ -1,0 +1,29 @@
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+
+export const addComment = mutation({
+    args: {
+        content: v.string(),
+        rating: v.number(),
+        interviewId: v.id("interviews")
+    },
+    handler: async (ctx, args) => {
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) throw new Error("User is not authenticated!");
+        return await ctx.db.insert("comments", {
+            interviewId: args.interviewId,
+            content: args.content,
+            rating: args.rating,
+            interviewerId: identity.subject, // indentity.subject will give the clerkId of the user like this indentity.subject -> users.clerkId
+        });
+
+    }
+})
+
+export const getComments = query({
+    args: { interviewId: v.id("interviews") },
+    handler: async (ctx, args) => {
+        const comments = await ctx.db.query("comments").withIndex("by_interview_id", (q) => q.eq("interviewId", args.interviewId)).collect(); // similar to writing query in sql where Id = 1
+        return comments;
+    }
+})
