@@ -4,11 +4,13 @@ import {
   CallParticipantsList,
   PaginatedGridLayout,
   SpeakerLayout,
+  useCall,
   useCallStateHooks,
 } from "@stream-io/video-react-sdk";
-import { LayoutListIcon, LoaderIcon, UsersIcon } from "lucide-react";
+import { LayoutListIcon, UsersIcon, PhoneOffIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -26,53 +28,146 @@ import CodeEditor from "./CodeEditor";
 
 function MeetingRoom() {
   const router = useRouter();
+  const call = useCall();
 
   const [layout, setLayout] = useState<"grid" | "speaker">("speaker");
   const [showParticipants, setShowParticipants] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
 
   const { useCallCallingState } = useCallStateHooks();
   const callingState = useCallCallingState();
 
+  // Fires for ALL participants when interviewer ends the call
+  useEffect(() => {
+    if (!call) return;
+
+    const handleCallEnded = () => {
+      setCallEnded(true);
+      setTimeout(() => router.push("/"), 2500);
+    };
+
+    call.on("call.ended", handleCallEnded);
+    return () => call.off("call.ended", handleCallEnded);
+  }, [call, router]);
+
+  // Show "meeting ended" screen to all participants
+  if (callEnded) {
+    return (
+      <div className="relative h-[calc(100vh-4rem-1px)] flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
+        <motion.div
+          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-[0.04] pointer-events-none"
+          style={{ background: "radial-gradient(circle, #fbbf24, transparent)" }}
+          animate={{ scale: [1, 1.15, 1] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="relative flex flex-col items-center gap-5 text-center"
+        >
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+            style={{
+              background: "rgba(251,191,36,0.07)",
+              border: "1px solid rgba(251,191,36,0.15)",
+              boxShadow: "0 0 40px rgba(251,191,36,0.08)",
+            }}
+          >
+            <PhoneOffIcon className="size-8 text-amber-400/70" strokeWidth={1.4} />
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold text-zinc-200 tracking-tight">Meeting Ended</h1>
+            <p className="text-[13px] text-zinc-500">The interviewer has ended this session</p>
+          </div>
+          <motion.p
+            animate={{ opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="text-[11px] tracking-[0.15em] uppercase"
+            style={{ color: "rgba(251,191,36,0.40)" }}
+          >
+            Redirecting you home…
+          </motion.p>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (callingState !== CallingState.JOINED) {
     return (
-      <div className="h-96 flex items-center justify-center">
-        <LoaderIcon className="size-6 animate-spin" />
+      <div className="h-[calc(100vh-4rem-1px)] flex flex-col items-center justify-center gap-4 bg-[#0a0a0f]">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+          className="size-7 text-amber-400"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </motion.div>
+        <p className="text-[11px] tracking-[0.2em] uppercase font-semibold" style={{ color: "rgba(251,191,36,0.45)" }}>
+          Joining session…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-4rem-1px)]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="h-[calc(100vh-4rem-1px)] bg-[#0a0a0f]"
+    >
       <ResizablePanelGroup orientation="horizontal" className="h-full">
-        <ResizablePanel minSize={250} className="relative">
+        <ResizablePanel defaultSize={40} minSize={25} maxSize={65} className="relative bg-[#0d0d14]">
           <div className="absolute inset-0">
-            {layout === `grid` ? <PaginatedGridLayout /> : <SpeakerLayout />}
-            {showParticipants && (
-              <div className="absolute right-0 top-0 h-full w-[300px] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <CallParticipantsList
-                  onClose={() => setShowParticipants(false)}
-                />
-              </div>
-            )}
+            {layout === "grid" ? <PaginatedGridLayout /> : <SpeakerLayout />}
+
+            <AnimatePresence>
+              {showParticipants && (
+                <motion.div
+                  initial={{ x: 300, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 300, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  className="absolute right-0 top-0 h-full w-[280px] bg-[#0d0d14]/95 backdrop-blur-md border-l border-white/5"
+                >
+                  <CallParticipantsList onClose={() => setShowParticipants(false)} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          {/*Video controls*/}
-          <div className="absolute bottom-4 left-0 right-0">
-            <div className="flex flex-col items-center gap-4">
+
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.4 }}
+            className="absolute bottom-4 left-0 right-0 z-10"
+          >
+            <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 flex-wrap justify-center px-4">
-                <CallControls onLeave={() => router.push("/")} />
+                <div className="flex items-center gap-2 bg-[#0d0d14]/80 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-2">
+                  <CallControls onLeave={() => router.push("/")} />
+                </div>
 
                 <div className="flex items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" className="size-10">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-10 rounded-xl bg-[#0d0d14]/80 backdrop-blur-md border-white/10 hover:bg-white/10 hover:border-amber-400/40 text-slate-300 hover:text-amber-400 transition-all duration-200"
+                      >
                         <LayoutListIcon className="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setLayout("grid")}>
+                    <DropdownMenuContent className="bg-[#13131e] border-white/10 text-slate-300 rounded-xl">
+                      <DropdownMenuItem onClick={() => setLayout("grid")} className="hover:bg-white/5 hover:text-amber-400 rounded-lg cursor-pointer">
                         Grid View
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLayout("speaker")}>
+                      <DropdownMenuItem onClick={() => setLayout("speaker")} className="hover:bg-white/5 hover:text-amber-400 rounded-lg cursor-pointer">
                         Speaker View
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -81,23 +176,30 @@ function MeetingRoom() {
                   <Button
                     variant="outline"
                     size="icon"
-                    className="size-10"
+                    className={`size-10 rounded-xl backdrop-blur-md border transition-all duration-200 ${
+                      showParticipants
+                        ? "bg-amber-400/10 border-amber-400/40 text-amber-400"
+                        : "bg-[#0d0d14]/80 border-white/10 text-slate-300 hover:bg-white/10 hover:border-amber-400/40 hover:text-amber-400"
+                    }`}
                     onClick={() => setShowParticipants(!showParticipants)}
                   >
                     <UsersIcon className="size-4" />
                   </Button>
-                  <EndCallButton/>
+
+                  <EndCallButton />
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel minSize={630}>
-          <CodeEditor/>
+
+        <ResizableHandle withHandle className="bg-white/5 hover:bg-amber-400/30 transition-colors duration-200 w-1" />
+
+        <ResizablePanel defaultSize={60} minSize={35} maxSize={75}>
+          <CodeEditor />
         </ResizablePanel>
       </ResizablePanelGroup>
-    </div>
+    </motion.div>
   );
 }
 
